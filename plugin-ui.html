@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Figma AI Design Plugin</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #ffffff;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    button {
+      background-color: #ff6b6b;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    button:hover {
+      background-color: #ff5252;
+    }
+    
+    button:active {
+      background-color: #e53935;
+    }
+    
+    .message {
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    
+    .message.received {
+      background-color: #e3f2fd;
+      color: #1976d2;
+      border: 1px solid #bbdefb;
+    }
+    
+    .message.sent {
+      background-color: #f3e5f5;
+      color: #7b1fa2;
+      border: 1px solid #e1bee7;
+    }
+    
+    .api-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .api-input {
+      padding: 10px 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      background-color: #fafafa;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+    
+    .api-input:focus {
+      outline: none;
+      border-color: #ff6b6b;
+      background-color: #ffffff;
+    }
+    
+    .verify-status {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      min-height: 20px;
+    }
+    
+    .verify-status.success {
+      background-color: #e8f5e8;
+      color: #2e7d32;
+      border: 1px solid #c8e6c9;
+    }
+    
+    .verify-status.error {
+      background-color: #ffebee;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+    }
+    
+    .divider {
+      border: none;
+      height: 1px;
+      background-color: #e0e0e0;
+      margin: 20px 0;
+    }
+    
+    .generation-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .generation-section h4 {
+      margin: 0;
+      color: #333;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .plan-textarea {
+      padding: 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      background-color: #fafafa;
+      resize: vertical;
+      min-height: 120px;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+    
+    .plan-textarea:focus {
+      outline: none;
+      border-color: #ff6b6b;
+      background-color: #ffffff;
+    }
+    
+    .generation-status {
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      min-height: 20px;
+      background-color: #f5f5f5;
+      color: #666;
+    }
+    
+    .generation-status.processing {
+      background-color: #fff3e0;
+      color: #f57c00;
+      border: 1px solid #ffcc02;
+    }
+    
+    .generation-status.success {
+      background-color: #e8f5e8;
+      color: #2e7d32;
+      border: 1px solid #c8e6c9;
+    }
+    
+    .generation-status.error {
+      background-color: #ffebee;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3>Figma AI Design Plugin</h3>
+    
+    <!-- API Key 입력 섹션 -->
+    <div class="api-section">
+      <input 
+        type="text" 
+        id="apiKey" 
+        placeholder="Enter OpenAI API Key"
+        class="api-input"
+      >
+      <button id="authButton">API Key 인증</button>
+      <div id="verifyStatus" class="verify-status"></div>
+      <div id="authStatus" style="margin-top: 8px; font-weight: bold;"></div>
+    </div>
+    
+    <hr class="divider">
+    
+    <!-- 디자인 생성 섹션 -->
+    <div class="generation-section">
+      <h4>디자인 생성</h4>
+      <textarea 
+        id="planInput" 
+        placeholder="기획서를 여기에 입력하세요" 
+        rows="8"
+        class="plan-textarea"
+      ></textarea>
+      <button id="generateBtn">디자인 생성</button>
+      <div id="generationStatus" class="generation-status"></div>
+    </div>
+    
+    <hr class="divider">
+    
+    <button id="sendMessageBtn">메시지 전송하기</button>
+    
+    <div id="messageLog"></div>
+  </div>
+
+            <script>
+            console.log("HTML 스크립트 태그 시작");
+            console.log("ui.js 파일 로드 시도...");
+
+            // 즉시 테스트
+            console.log("즉시 DOM 테스트 시작");
+            const immediateButton = document.getElementById('authButton');
+            console.log("즉시 authButton 찾기 결과:", immediateButton);
+            
+            // 1초 후 테스트
+            setTimeout(() => {
+              console.log("1초 후 실행되는 테스트");
+              const testButton = document.getElementById('authButton');
+              console.log("1초 후 authButton 찾기 결과:", testButton);
+              if (testButton) {
+                console.log("1초 후 authButton ID:", testButton.id);
+                testButton.onclick = () => {
+                  console.log("1초 후 onclick 테스트 성공!");
+                  alert("1초 후 onclick 테스트 성공!");
+                };
+              }
+            }, 1000);
+            
+            // 3초 후 테스트 - 실제 인증 로직 추가
+            setTimeout(() => {
+              console.log("3초 후 실행되는 테스트");
+              const testButton = document.getElementById('authButton');
+              const apiKeyInput = document.getElementById('apiKey');
+              const authStatus = document.getElementById('authStatus');
+              
+              console.log("3초 후 authButton 찾기 결과:", testButton);
+              if (testButton) {
+                console.log("3초 후 authButton ID:", testButton.id);
+                testButton.onclick = () => {
+                  console.log("실제 인증 버튼 클릭됨!");
+                  
+                  const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+                  console.log('API Key:', apiKey ? apiKey.substring(0, 10) + '...' : '없음');
+                  
+                  if (!apiKey) {
+                    if (authStatus) {
+                      authStatus.innerText = "❌ API Key를 입력해주세요.";
+                      authStatus.style.color = "red";
+                    }
+                    return;
+                  }
+                  
+                  if (!apiKey.startsWith("sk-")) {
+                    if (authStatus) {
+                      authStatus.innerText = "❌ API 키 형식이 올바르지 않습니다.";
+                      authStatus.style.color = "red";
+                    }
+                    return;
+                  }
+                  
+                  // 인증 처리
+                  if (testButton) {
+                    testButton.innerText = "인증 중...";
+                    testButton.disabled = true;
+                  }
+                  
+                  if (authStatus) {
+                    authStatus.innerText = "인증 중...";
+                    authStatus.style.color = "#f57c00";
+                  }
+                  
+                  // code.ts로 메시지 전송
+                  try {
+                    parent.postMessage({ 
+                      pluginMessage: { 
+                        type: 'verify-api-key', 
+                        key: apiKey 
+                      } 
+                    }, '*');
+                    console.log('parent.postMessage 전송 완료');
+                  } catch (error) {
+                    console.error('메시지 전송 오류:', error);
+                  }
+                };
+              }
+            }, 3000);
+            
+            // 디자인 생성 버튼도 HTML에서 직접 처리
+            setTimeout(() => {
+              console.log("디자인 생성 버튼 이벤트 등록 시도...");
+              const generateBtn = document.getElementById('generateBtn');
+              const planInput = document.getElementById('planInput');
+              const generationStatus = document.getElementById('generationStatus');
+              
+              console.log("generateBtn 찾기 결과:", generateBtn);
+              if (generateBtn) {
+                console.log("디자인 생성 버튼 이벤트 등록 완료!");
+                generateBtn.onclick = function() {
+                  console.log("디자인 생성 버튼 클릭됨!");
+                  
+                  const planText = planInput ? planInput.value.trim() : '';
+                  console.log('기획서 내용:', planText ? planText.substring(0, 50) + '...' : '없음');
+                  
+                  if (!planText) {
+                    if (generationStatus) {
+                      generationStatus.innerText = "기획서를 입력해주세요.";
+                      generationStatus.style.color = "red";
+                    }
+                    return;
+                  }
+                  
+                  // 디자인 생성 요청
+                  if (generationStatus) {
+                    generationStatus.innerText = "GPT 분석 중...";
+                    generationStatus.style.color = "#f57c00";
+                  }
+                  
+                  try {
+                    parent.postMessage({ 
+                      pluginMessage: { 
+                        type: 'start-generation', 
+                        payload: planText 
+                      } 
+                    }, '*');
+                    console.log('디자인 생성 요청 전송 완료');
+                  } catch (error) {
+                    console.error('디자인 생성 요청 오류:', error);
+                  }
+                };
+              }
+            }, 3000);
+            
+            // 메시지 수신 처리도 HTML에 직접 추가
+            window.addEventListener('message', function(event) {
+              const message = event.data.pluginMessage;
+              if (message) {
+                console.log('HTML에서 메시지 수신:', message);
+                
+                if (message.type === 'verify-success') {
+                  console.log('인증 성공 메시지 수신됨!');
+                  const authButton = document.getElementById('authButton');
+                  const authStatus = document.getElementById('authStatus');
+                  
+                  if (authButton) {
+                    authButton.innerText = "인증 완료";
+                    authButton.style.backgroundColor = "#4CAF50";
+                    authButton.disabled = false;
+                    console.log('버튼 업데이트 완료');
+                  }
+                  
+                  if (authStatus) {
+                    authStatus.innerText = "✅ 인증 완료되었습니다.";
+                    authStatus.style.color = "green";
+                    console.log('상태 메시지 업데이트 완료');
+                  }
+                }
+                
+                if (message.type === 'verify-fail') {
+                  console.log('인증 실패 메시지 수신됨!');
+                  const authButton = document.getElementById('authButton');
+                  const authStatus = document.getElementById('authStatus');
+                  
+                  if (authButton) {
+                    authButton.innerText = "API Key 인증";
+                    authButton.style.backgroundColor = "#ff6b6b";
+                    authButton.disabled = false;
+                  }
+                  
+                  if (authStatus) {
+                    authStatus.innerText = "❌ 인증 실패. 다시 시도해주세요.";
+                    authStatus.style.color = "red";
+                  }
+                }
+                
+                if (message.type === 'generation-status') {
+                  console.log('디자인 생성 상태 메시지 수신됨!');
+                  const generationStatus = document.getElementById('generationStatus');
+                  
+                  if (generationStatus) {
+                    generationStatus.innerText = message.message;
+                    
+                    if (message.status === 'success') {
+                      generationStatus.style.color = "green";
+                    } else if (message.status === 'error') {
+                      generationStatus.style.color = "red";
+                    } else {
+                      generationStatus.style.color = "#f57c00";
+                    }
+                    console.log('디자인 생성 상태 업데이트 완료:', message.message);
+                  }
+                }
+              }
+            });
+          </script>
+  <script src="ui.js"></script>
+  <script>
+    console.log("HTML 스크립트 태그 완료");
+  </script>
+</body>
+</html> 

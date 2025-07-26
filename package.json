@@ -1,0 +1,12 @@
+{
+  "name": "figma-ai-design-plugin",
+  "version": "1.0.0",
+  "description": "Figma plugin for AI-powered UI generation",
+  "scripts": {
+    "build": "esbuild code.ts --bundle --outfile=code.js --platform=browser --target=esnext",
+    "watch": "esbuild code.ts --bundle --outfile=code.js --platform=browser --target=esnext --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}

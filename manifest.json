@@ -1,0 +1,11 @@
+{
+  "name": "Prompt to UI Generator",
+  "id": "figma-ai-design-plugin",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "plugin-ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["https://api.openai.com"]
+  }
+}
