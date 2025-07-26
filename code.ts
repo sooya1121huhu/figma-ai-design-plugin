@@ -1,5 +1,5 @@
-// Figma 플러그인 메인 코드
-// UI와의 메시지 통신을 처리하고 플러그인 기능을 구현합니다
+// Figma AI Design Plugin
+// 기획서를 입력받아 GPT로 분석하고 Figma 디자인을 생성하는 플러그인
 
 figma.showUI(__html__, { width: 400, height: 500 });
 
@@ -16,17 +16,21 @@ async function callOpenAI(apiKey: string, prompt: string, model: string = 'gpt-4
         model: model,
         messages: [
           {
+            role: 'system',
+            content: 'You are a UI/UX designer. Create simple, mobile-friendly UI components.'
+          },
+          {
             role: 'user',
             content: prompt
           }
         ],
-        temperature: 0.7,
-        max_tokens: 2000
+        max_tokens: 1000,
+        temperature: 0.7
       })
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API 오류: ${response.status} ${response.statusText}`);
+      throw new Error(`OpenAI API 오류: ${response.status}`);
     }
 
     const data = await response.json();
@@ -37,26 +41,333 @@ async function callOpenAI(apiKey: string, prompt: string, model: string = 'gpt-4
   }
 }
 
+// 기본 컴포넌트 생성 함수 (JSON 파싱 실패 시 사용)
+function createDefaultComponents(section: {name: string, content: string}, startY: number): any[] {
+  const components = [];
+  
+  switch (section.name) {
+    case '헤더':
+      components.push({
+        name: 'Header Title',
+        type: 'text',
+        content: '웨딩홀 리뷰',
+        width: 300,
+        height: 40,
+        x: 0,
+        y: startY,
+        backgroundColor: '#FFFFFF',
+        fontSize: 24,
+        fontWeight: 'BOLD',
+        textAlign: 'CENTER'
+      });
+      break;
+      
+    case '평점':
+      components.push({
+        name: 'Rating Container',
+        type: 'frame',
+        width: 320,
+        height: 80,
+        x: 0,
+        y: startY,
+        backgroundColor: '#F8F9FA',
+        layoutMode: 'VERTICAL',
+        itemSpacing: 16,
+        paddingLeft: 16,
+        paddingRight: 16,
+        paddingTop: 16,
+        paddingBottom: 16,
+        children: [
+          {
+            name: 'Rating Label',
+            type: 'text',
+            content: '평점을 선택해주세요',
+            width: 288,
+            height: 24,
+            x: 16,
+            y: startY + 16,
+            backgroundColor: '#F8F9FA',
+            fontSize: 16,
+            fontWeight: 'BOLD',
+            textAlign: 'LEFT'
+          }
+        ]
+      });
+      break;
+      
+    case '사진업로드':
+      components.push({
+        name: 'Photo Upload',
+        type: 'rectangle',
+        width: 320,
+        height: 120,
+        x: 0,
+        y: startY,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 8,
+        borderColor: '#E9ECEF',
+        borderWidth: 2
+      });
+      break;
+      
+    case '텍스트입력':
+      components.push({
+        name: 'Text Input',
+        type: 'rectangle',
+        width: 320,
+        height: 100,
+        x: 0,
+        y: startY,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 8,
+        borderColor: '#E9ECEF',
+        borderWidth: 1
+      });
+      break;
+      
+    case '버튼':
+      components.push({
+        name: 'Submit Button',
+        type: 'rectangle',
+        width: 320,
+        height: 48,
+        x: 0,
+        y: startY,
+        backgroundColor: '#FF6B9D',
+        borderRadius: 24
+      });
+      break;
+      
+    default:
+      components.push({
+        name: 'Default Component',
+        type: 'text',
+        content: section.content || '컴포넌트',
+        width: 300,
+        height: 40,
+        x: 0,
+        y: startY,
+        backgroundColor: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'NORMAL',
+        textAlign: 'LEFT'
+      });
+  }
+  
+  return components;
+}
+
+// 기획서를 섹션별로 분석하는 함수
+function analyzePlanSections(planText: string): Array<{name: string, content: string}> {
+  const sections = [];
+  
+  // 더 정교한 섹션 패턴 정의
+  const sectionPatterns = [
+    { 
+      name: "헤더", 
+      keywords: ["제목", "부제", "타이틀", "title", "subtitle"],
+      priority: 1
+    },
+    { 
+      name: "평점", 
+      keywords: ["평점", "별점", "rating", "점수", "star", "별"],
+      priority: 2
+    },
+    { 
+      name: "사진업로드", 
+      keywords: ["사진", "업로드", "이미지", "photo", "upload", "image"],
+      priority: 3
+    },
+    { 
+      name: "텍스트입력", 
+      keywords: ["입력", "후기", "내용", "text", "input", "textarea", "리뷰"],
+      priority: 4
+    },
+    { 
+      name: "버튼", 
+      keywords: ["버튼", "제출", "등록", "button", "submit", "확인"],
+      priority: 5
+    }
+  ];
+  
+  // 각 섹션에 해당하는 내용 추출 (우선순위 순서대로)
+  const sortedPatterns = sectionPatterns.sort((a, b) => a.priority - b.priority);
+  
+  for (const section of sortedPatterns) {
+    const matchingLines = planText.split('\n').filter(line => 
+      section.keywords.some(keyword => 
+        line.toLowerCase().includes(keyword.toLowerCase())
+      )
+    );
+    
+    if (matchingLines.length > 0) {
+      sections.push({
+        name: section.name,
+        content: matchingLines.join('\n')
+      });
+    }
+  }
+  
+  // 매칭되지 않은 내용이 있으면 "기타" 섹션으로 추가
+  if (sections.length === 0) {
+    sections.push({
+      name: "전체",
+      content: planText
+    });
+  }
+  
+  return sections;
+}
+
+// 각 섹션별로 디자인을 생성하는 함수
+async function generateSectionDesign(apiKey: string, section: {name: string, content: string}, startY: number): Promise<any[]> {
+  const prompt = `You are a senior UI/UX designer at Apple/Google. Create production-ready mobile UI components.
+
+Section: ${section.name}
+Content: ${section.content}
+
+## Design System:
+- **Mobile First**: 375px width, iOS/Android guidelines
+- **Typography**: Inter font, 12/14/16/18/20/24/32px scale
+- **Spacing**: 8px grid system (8, 16, 24, 32, 48px)
+- **Colors**: Wedding theme (#FF6B9D primary, #FF8A80 secondary, #FFFFFF background, #F8F9FA surface, #212529 text, #6C757D secondary text)
+- **Shadows**: Subtle elevation (0 2px 8px rgba(0,0,0,0.1))
+- **Border Radius**: 8px for cards, 24px for buttons, 4px for inputs
+
+## Component Guidelines:
+
+### Headers:
+- Title: 24px, bold, #212529, center aligned
+- Subtitle: 16px, normal, #6C757D, center aligned
+- Section headers: 18px, bold, #212529, left aligned
+
+### Rating Components:
+- Create individual star components (5 stars)
+- Star size: 20px, #FF6B9D for filled, #E9ECEF for empty
+- Horizontal layout with proper spacing
+
+### Buttons:
+- Height: 48px minimum
+- Border radius: 24px
+- Primary: #FF6B9D background, white text
+- Secondary: transparent background, #FF6B9D border and text
+
+### Input Fields:
+- Height: 48px
+- Border radius: 8px
+- Border: 1px #E9ECEF
+- Focus state: #FF6B9D border
+
+### Cards/Containers:
+- Background: #FFFFFF
+- Border radius: 8px
+- Shadow: 0 2px 8px rgba(0,0,0,0.1)
+- Padding: 16px or 24px
+
+Return a JSON array with production-quality components:
+
+[
+  {
+    "name": "Component Name",
+    "type": "text|frame|rectangle|ellipse|star",
+    "content": "Text content (for text type)",
+    "width": number,
+    "height": number,
+    "x": number,
+    "y": ${startY},
+    "backgroundColor": "#FFFFFF",
+    "fontSize": number,
+    "fontWeight": "NORMAL|BOLD",
+    "textAlign": "LEFT|CENTER|RIGHT",
+    "borderRadius": number,
+    "borderColor": "#E9ECEF",
+    "borderWidth": number,
+    "layoutMode": "HORIZONTAL|VERTICAL" (for frames),
+    "itemSpacing": number,
+    "paddingLeft": number,
+    "paddingRight": number,
+    "paddingTop": number,
+    "paddingBottom": number,
+    "children": [child components array]
+  }
+]
+
+Create pixel-perfect, production-ready components. Return only valid JSON.`;
+
+  try {
+    const response = await callOpenAI(apiKey, prompt);
+    
+    // 더 강력한 JSON 파싱
+    let cleanedResponse = response.trim()
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/,(\s*[}\]])/g, '$1') // trailing comma 제거
+      .trim();
+    
+    // JSON 배열 패턴 찾기
+    const arrayMatch = cleanedResponse.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      cleanedResponse = arrayMatch[0];
+    }
+    
+    // 괄호 균형 확인
+    const openBrackets = (cleanedResponse.match(/\[/g) || []).length;
+    const closeBrackets = (cleanedResponse.match(/\]/g) || []).length;
+    
+    if (openBrackets !== closeBrackets) {
+      console.log(`${section.name}: JSON 괄호 불균형, 기본 컴포넌트 생성`);
+      return createDefaultComponents(section, startY);
+    }
+    
+    const components = JSON.parse(cleanedResponse);
+    
+    // Y 위치 조정
+    let currentY = startY;
+    for (const component of components) {
+      component.y = currentY;
+      currentY += (component.height || 60) + 10; // 10px 간격
+    }
+    
+    return components;
+  } catch (error) {
+    console.error(`${section.name} 섹션 생성 오류:`, error);
+    return createDefaultComponents(section, startY);
+  }
+}
+
 // Figma 컴포넌트 생성 함수
 async function createFigmaComponent(designData: any, parent: SceneNode = figma.currentPage): Promise<FrameNode> {
+  // 폰트 로드
+  await loadFontWithFallback();
+  
+  // 메인 프레임 생성
   const frame = figma.createFrame();
-  frame.name = designData.name || 'Generated Component';
-  frame.resize(designData.width || 400, designData.height || 300);
+  frame.name = designData.name || "Generated Design";
+  frame.resize(designData.width || 375, designData.height || 600);
   frame.x = designData.x || 0;
   frame.y = designData.y || 0;
   
-  // Auto Layout 적용
-  frame.layoutMode = "VERTICAL";
-  frame.primaryAxisAlignItems = "MIN";
-  frame.counterAxisAlignItems = "MIN";
-  frame.itemSpacing = 16;
-  frame.paddingLeft = 24;
-  frame.paddingRight = 24;
-  frame.paddingTop = 24;
-  frame.paddingBottom = 24;
-  
+  // 배경색 설정
   if (designData.backgroundColor) {
     frame.fills = [{ type: 'SOLID', color: hexToRgb(designData.backgroundColor) }];
+  }
+  
+  // Auto Layout 설정 (안전하게 설정)
+  if (designData.layoutMode) {
+    try {
+      frame.layoutMode = designData.layoutMode;
+      frame.primaryAxisAlignItems = designData.primaryAxisAlignItems || "MIN";
+      frame.counterAxisAlignItems = designData.counterAxisAlignItems || "MIN";
+      frame.itemSpacing = designData.itemSpacing || 16;
+      frame.paddingLeft = designData.paddingLeft || 24;
+      frame.paddingRight = designData.paddingRight || 24;
+      frame.paddingTop = designData.paddingTop || 24;
+      frame.paddingBottom = designData.paddingBottom || 24;
+    } catch (error) {
+      console.log('Auto Layout 설정 실패:', error);
+    }
   }
   
   // 자식 요소들 생성
@@ -67,26 +378,24 @@ async function createFigmaComponent(designData: any, parent: SceneNode = figma.c
     }
   }
   
+  // 부모에 추가
+  parent.appendChild(frame);
+  
   return frame;
 }
 
 // 폰트 로드 함수 (fallback 포함)
 async function loadFontWithFallback(): Promise<void> {
-  const fonts = [
-    { family: "Inter", style: "Regular" },
-    { family: "Roboto", style: "Regular" },
-    { family: "Segoe UI", style: "Regular" },
-    { family: "Arial", style: "Regular" }
-  ];
+  const fonts = ['Inter', 'Roboto', 'Segoe UI', 'Arial'];
   
   for (const font of fonts) {
     try {
-      await figma.loadFontAsync(font);
-      console.log(`폰트 로드 성공: ${font.family}`);
+      await figma.loadFontAsync({ family: font, style: 'Regular' });
+      await figma.loadFontAsync({ family: font, style: 'Bold' });
+      console.log(`폰트 로드 성공: ${font}`);
       return;
     } catch (error) {
-      console.log(`폰트 로드 실패: ${font.family}`, error);
-      continue;
+      console.log(`폰트 로드 실패: ${font}`);
     }
   }
   
@@ -98,107 +407,145 @@ async function createChildNode(childData: any, parent: FrameNode, yOffset: numbe
   let node: SceneNode;
   let currentYOffset = yOffset;
   
+  // 기본값 설정
+  const width = childData.width || (childData.type === 'text' ? 300 : 400);
+  const height = childData.height || (childData.type === 'text' ? 60 : 200);
+  const x = childData.x || 0;
+  const y = childData.y !== undefined ? childData.y : currentYOffset;
+  
+  // 노드 타입에 따라 생성
   switch (childData.type) {
-    case 'text':
-      node = figma.createText();
-      try {
-        await loadFontWithFallback();
-        (node as TextNode).characters = childData.content || '';
-        (node as TextNode).fontSize = 16;
-        (node as TextNode).textAlignHorizontal = "CENTER";
-        (node as TextNode).textAlignVertical = "CENTER";
-      } catch (error) {
-        console.error('폰트 로드 실패:', error);
-        // 기본 텍스트로 설정
-        (node as TextNode).characters = childData.content || '';
-      }
-      break;
+          case 'text':
+        const textNode = figma.createText();
+        textNode.characters = childData.content || 'Sample Text';
+        textNode.fontSize = childData.fontSize || 16;
+        
+        // fontWeight 설정을 안전하게 처리
+        if (childData.fontWeight === 'BOLD') {
+          try {
+            textNode.fontWeight = 'Bold';
+          } catch (error) {
+            console.log('fontWeight 설정 실패:', error);
+          }
+        }
+        
+        // 텍스트 정렬 설정 (가능한 경우)
+        try {
+          if (childData.textAlign === 'CENTER') {
+            textNode.textAlignHorizontal = 'CENTER';
+          } else if (childData.textAlign === 'RIGHT') {
+            textNode.textAlignHorizontal = 'RIGHT';
+          } else {
+            textNode.textAlignHorizontal = 'LEFT';
+          }
+        } catch (error) {
+          console.log('텍스트 정렬 설정 실패:', error);
+        }
+        
+        node = textNode;
+        break;
       
-    case 'frame':
-      node = figma.createFrame();
-      // Auto Layout 적용 (frame 타입인 경우)
-      (node as FrameNode).layoutMode = "VERTICAL";
-      (node as FrameNode).primaryAxisAlignItems = "MIN";
-      (node as FrameNode).counterAxisAlignItems = "MIN";
-      (node as FrameNode).itemSpacing = 16;
-      (node as FrameNode).paddingLeft = 24;
-      (node as FrameNode).paddingRight = 24;
-      (node as FrameNode).paddingTop = 24;
-      (node as FrameNode).paddingBottom = 24;
+          case 'frame':
+        const frameNode = figma.createFrame();
+        frameNode.name = childData.name || 'Frame';
+        
+        // Auto Layout 설정을 안전하게 처리
+        if (childData.layoutMode) {
+          try {
+            frameNode.layoutMode = childData.layoutMode;
+            frameNode.primaryAxisAlignItems = childData.primaryAxisAlignItems || "MIN";
+            frameNode.counterAxisAlignItems = childData.counterAxisAlignItems || "MIN";
+            frameNode.itemSpacing = childData.itemSpacing || 16;
+            frameNode.paddingLeft = childData.paddingLeft || 16;
+            frameNode.paddingRight = childData.paddingRight || 16;
+            frameNode.paddingTop = childData.paddingTop || 16;
+            frameNode.paddingBottom = childData.paddingBottom || 16;
+          } catch (error) {
+            console.log('Frame Auto Layout 설정 실패:', error);
+          }
+        }
+        node = frameNode;
+        break;
       
-      if (childData.backgroundColor) {
-        node.fills = [{ type: 'SOLID', color: hexToRgb(childData.backgroundColor) }];
-      }
-      break;
-      
-    case 'rectangle':
-      node = figma.createRectangle();
-      if (childData.backgroundColor) {
-        node.fills = [{ type: 'SOLID', color: hexToRgb(childData.backgroundColor) }];
-      }
-      break;
+          case 'rectangle':
+        const rectNode = figma.createRectangle();
+        rectNode.name = childData.name || 'Rectangle';
+        if (childData.borderRadius) {
+          try {
+            rectNode.cornerRadius = childData.borderRadius;
+          } catch (error) {
+            console.log('cornerRadius 설정 실패:', error);
+          }
+        }
+        node = rectNode;
+        break;
       
     case 'ellipse':
-      node = figma.createEllipse();
-      if (childData.backgroundColor) {
-        node.fills = [{ type: 'SOLID', color: hexToRgb(childData.backgroundColor) }];
-      }
+      const ellipseNode = figma.createEllipse();
+      ellipseNode.name = childData.name || 'Ellipse';
+      node = ellipseNode;
+      break;
+      
+    case 'star':
+      const starNode = figma.createStar();
+      starNode.name = childData.name || 'Star';
+      node = starNode;
       break;
       
     default:
-      node = figma.createFrame();
-  }
-  
-  // 기본 크기 설정
-  let defaultWidth = 400;
-  let defaultHeight = 200;
-  
-  if (childData.type === 'text') {
-    defaultWidth = 300;
-    defaultHeight = 60;
+      const defaultNode = figma.createRectangle();
+      defaultNode.name = childData.name || 'Component';
+      node = defaultNode;
   }
   
   // 공통 속성 설정
-  node.name = childData.name || 'Generated Element';
-  node.resize(childData.width || defaultWidth, childData.height || defaultHeight);
+  node.resize(width, height);
+  node.x = x;
+  node.y = y;
   
-  // 위치 설정 (x, y가 명시되지 않은 경우 자동 정렬)
-  if (childData.x !== undefined) {
-    node.x = childData.x;
-  } else {
-    node.x = 0;
+  // 배경색 설정 (fills가 지원되는 노드 타입만)
+  if (childData.backgroundColor && 'fills' in node) {
+    try {
+      node.fills = [{ type: 'SOLID', color: hexToRgb(childData.backgroundColor) }];
+    } catch (error) {
+      console.log('배경색 설정 실패:', error);
+    }
   }
   
-  if (childData.y !== undefined) {
-    node.y = childData.y;
-  } else {
-    node.y = currentYOffset;
-    currentYOffset += (childData.height || defaultHeight) + 16; // 16px 간격 (개선된 간격)
+  // 테두리 설정 (strokes가 지원되는 노드 타입만)
+  if (childData.borderColor && childData.borderWidth && 'strokes' in node) {
+    try {
+      node.strokes = [{ type: 'SOLID', color: hexToRgb(childData.borderColor) }];
+      node.strokeWeight = childData.borderWidth;
+    } catch (error) {
+      console.log('테두리 설정 실패:', error);
+    }
   }
   
-  // Auto Layout 속성 설정 (frame인 경우)
-  if (node.type === 'FRAME' && childData.layoutMode) {
-    node.layoutMode = childData.layoutMode;
-    if (childData.primaryAxisAlignItems) {
-      node.primaryAxisAlignItems = childData.primaryAxisAlignItems;
+  // 모서리 반경 설정 (cornerRadius가 지원되는 노드 타입만)
+  if (childData.borderRadius && 'cornerRadius' in node) {
+    try {
+      node.cornerRadius = childData.borderRadius;
+    } catch (error) {
+      console.log('모서리 반경 설정 실패:', error);
     }
-    if (childData.counterAxisAlignItems) {
-      node.counterAxisAlignItems = childData.counterAxisAlignItems;
-    }
-    if (childData.itemSpacing !== undefined) {
-      node.itemSpacing = childData.itemSpacing;
-    }
-    if (childData.paddingLeft !== undefined) {
-      node.paddingLeft = childData.paddingLeft;
-    }
-    if (childData.paddingRight !== undefined) {
-      node.paddingRight = childData.paddingRight;
-    }
-    if (childData.paddingTop !== undefined) {
-      node.paddingTop = childData.paddingTop;
-    }
-    if (childData.paddingBottom !== undefined) {
-      node.paddingBottom = childData.paddingBottom;
+  }
+  
+  // 그림자 효과 추가 (effects가 지원되는 노드 타입만)
+  if ('effects' in node && (childData.type === 'frame' || childData.type === 'rectangle')) {
+    try {
+      node.effects = [
+        {
+          type: 'DROP_SHADOW',
+          color: { r: 0, g: 0, b: 0, a: 0.1 },
+          offset: { x: 0, y: 2 },
+          radius: 8,
+          visible: true,
+          blendMode: 'NORMAL'
+        }
+      ];
+    } catch (error) {
+      console.log('그림자 효과 설정 실패:', error);
     }
   }
   
@@ -213,7 +560,7 @@ async function createChildNode(childData: any, parent: FrameNode, yOffset: numbe
     }
   }
   
-  return currentYOffset;
+  return y + height + 10; // 다음 요소의 Y 위치
 }
 
 // HEX 색상을 RGB로 변환하는 함수
@@ -232,6 +579,7 @@ function hexToRgb(hex: string): RGB {
 // UI로부터 메시지를 받는 이벤트 리스너
 figma.ui.onmessage = async (msg) => {
   console.log('code.ts: 메시지 수신됨:', msg);
+  
   if (msg.type === 'hello-from-ui') {
     console.log('UI에서 받은 메시지:', msg.message);
     
@@ -296,201 +644,56 @@ figma.ui.onmessage = async (msg) => {
       
       const planText = msg.payload;
       
-      // Step 1: 기획서를 컴포넌트 리스트로 파싱
-      figma.ui.postMessage({
-        type: 'generation-status',
-        message: 'GPT 분석 중...',
-        status: 'processing'
-      });
+      // 기획서를 섹션별로 분석
+      const sections = analyzePlanSections(planText);
+      console.log('분석된 섹션들:', sections);
       
-      const step1Prompt = `You are a senior product designer with expertise in Figma and mobile UI design.
-
-Your task is to analyze the following planning document and generate a comprehensive UI component list for a clean, mobile-friendly wireframe layout.
-
-Use visual hierarchy, proper spacing, and modern design components. Group related elements together logically.
-
-Use soft, wedding-themed colors (soft pinks, corals, whites, light grays) and emphasize clarity and friendliness.
-
-Here is the planning document written by the user:
-"""
-${planText}
-"""
-
-Please generate a detailed component list that includes:
-- Section headers with clear typography hierarchy
-- Input fields with proper labels and placeholders
-- Interactive elements (buttons, toggles, sliders)
-- Rating components (star ratings, scales)
-- Image upload areas with visual indicators
-- Large, prominent CTA (Call-to-Action) buttons
-- Proper spacing and grouping containers
-
-Return a JSON array with the following structure:
-[
-  {
-    "name": "Component Name",
-    "type": "text|frame|rectangle|ellipse",
-    "content": "Text content (for text type)",
-    "width": number,
-    "height": number,
-    "x": number,
-    "y": number,
-    "backgroundColor": "#colorcode (optional)",
-    "fontSize": number (for text),
-    "textAlign": "LEFT|CENTER|RIGHT",
-    "children": [child components array]
-  }
-]
-
-Focus on creating a logical, aesthetic grouping of UI elements that fits a mobile screen layout (320-375px width).
-Use wedding-themed colors: #FF6B9D (soft pink), #FF8A80 (coral), #F8F9FA (light gray), #FFFFFF (white), #6C757D (text gray).
-
-Return only valid JSON without any additional text or markdown formatting.`;
-
-      const componentListResponse = await callOpenAI(apiKey, step1Prompt);
-      let componentList;
+      // 전체 디자인 데이터를 저장할 배열
+      let allDesignData = [];
+      let currentY = 0;
       
-      try {
-        // 응답 정리 (마크다운 코드 블록 제거)
-        let cleanedResponse = componentListResponse.trim();
+      // 각 섹션을 순차적으로 처리
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
         
-        // ```json과 ``` 제거
-        cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        console.log('정리된 응답:', cleanedResponse);
+        figma.ui.postMessage({
+          type: 'generation-status',
+          message: `${section.name} 생성 중... (${i + 1}/${sections.length})`,
+          status: 'processing'
+        });
         
-        // JSON 파싱 시도
-        componentList = JSON.parse(cleanedResponse);
-      } catch (parseError) {
-        console.error('컴포넌트 리스트 파싱 오류:', parseError);
-        console.log('파싱 실패한 응답:', componentListResponse);
+        // 각 섹션별로 디자인 생성
+        const sectionDesign = await generateSectionDesign(apiKey, section, currentY);
+        allDesignData = allDesignData.concat(sectionDesign);
         
-        // JSON 추출 시도 (더 강력한 정규식)
-        const jsonMatch = componentListResponse.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          try {
-            componentList = JSON.parse(jsonMatch[0]);
-            console.log('JSON 추출 성공:', componentList);
-          } catch (extractError) {
-            console.error('JSON 추출 후 파싱 실패:', extractError);
-            throw new Error('컴포넌트 리스트를 파싱할 수 없습니다.');
-          }
-        } else {
-          throw new Error('컴포넌트 리스트를 파싱할 수 없습니다.');
+        // 다음 섹션의 Y 위치 계산
+        if (sectionDesign.length > 0) {
+          const lastElement = sectionDesign[sectionDesign.length - 1];
+          currentY = lastElement.y + lastElement.height + 20; // 20px 간격
         }
       }
       
-      // Step 2: 컴포넌트 리스트를 Figma 디자인 JSON으로 변환
+      // 전체 디자인을 하나의 프레임으로 생성
+      const mainFrame = {
+        name: "Review Page",
+        type: "frame",
+        width: 375,
+        height: currentY + 50,
+        x: 0,
+        y: 0,
+        backgroundColor: "#FFFFFF",
+        children: allDesignData
+      };
+      
+      // Figma에 디자인 생성
       figma.ui.postMessage({
         type: 'generation-status',
-        message: '디자인 생성 중...',
+        message: 'Figma 컴포넌트 생성 중...',
         status: 'processing'
       });
       
-      const step2Prompt = `You are a senior Figma designer specializing in mobile UI design and component architecture.
-
-Your task is to convert the following component list into a well-structured Figma design JSON that will create a beautiful, mobile-friendly UI layout.
-
-The design should follow modern mobile design principles:
-- Proper visual hierarchy with clear typography
-- Consistent spacing and alignment
-- Mobile-first responsive layout (320-375px width)
-- Wedding-themed color palette
-- Clean, professional appearance
-
-Component List:
-${JSON.stringify(componentList, null, 2)}
-
-Please convert this into a Figma-compatible JSON structure with the following specifications:
-
-{
-  "name": "Main Frame Name",
-  "width": 375,
-  "height": number (calculated based on content),
-  "backgroundColor": "#FFFFFF",
-  "layoutMode": "VERTICAL",
-  "primaryAxisAlignItems": "MIN",
-  "counterAxisAlignItems": "MIN",
-  "itemSpacing": 16,
-  "paddingLeft": 24,
-  "paddingRight": 24,
-  "paddingTop": 24,
-  "paddingBottom": 24,
-  "children": [
-    {
-      "type": "text|frame|rectangle|ellipse",
-      "name": "Element Name",
-      "content": "Text content (for text type)",
-      "width": number,
-      "height": number,
-      "x": number,
-      "y": number,
-      "backgroundColor": "#colorcode",
-      "fontSize": number (for text elements),
-      "textAlign": "LEFT|CENTER|RIGHT",
-      "layoutMode": "VERTICAL" (for frame containers),
-      "itemSpacing": number (for frame containers),
-      "paddingLeft": number,
-      "paddingRight": number,
-      "paddingTop": number,
-      "paddingBottom": number,
-      "children": [child elements array]
-    }
-  ]
-}
-
-Design Guidelines:
-- Use wedding-themed colors: #FF6B9D (soft pink), #FF8A80 (coral), #F8F9FA (light gray), #FFFFFF (white), #6C757D (text gray)
-- Ensure proper spacing between elements (16px minimum)
-- Group related elements in frame containers
-- Use appropriate font sizes (16px for body text, 20px+ for headers)
-- Create a logical visual hierarchy
-
-Return only valid JSON without any additional text or markdown formatting.`;
-
-      const designJsonResponse = await callOpenAI(apiKey, step2Prompt);
-      let designData;
+      await createFigmaComponent(mainFrame);
       
-      try {
-        // 응답 정리 (마크다운 코드 블록 제거)
-        let cleanedResponse = designJsonResponse.trim();
-        
-        // ```json과 ``` 제거
-        cleanedResponse = cleanedResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        console.log('정리된 디자인 응답:', cleanedResponse);
-        
-        // JSON 파싱 시도
-        designData = JSON.parse(cleanedResponse);
-      } catch (parseError) {
-        console.error('디자인 JSON 파싱 오류:', parseError);
-        console.log('파싱 실패한 디자인 응답:', designJsonResponse);
-        
-        // JSON 추출 시도 (더 강력한 정규식)
-        const jsonMatch = designJsonResponse.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            designData = JSON.parse(jsonMatch[0]);
-            console.log('디자인 JSON 추출 성공:', designData);
-          } catch (extractError) {
-            console.error('디자인 JSON 추출 후 파싱 실패:', extractError);
-            throw new Error('디자인 JSON을 파싱할 수 없습니다.');
-          }
-        } else {
-          throw new Error('디자인 JSON을 파싱할 수 없습니다.');
-        }
-      }
-      
-      // Step 3: Figma 캔버스에 컴포넌트 생성
-      try {
-        console.log('Figma 컴포넌트 생성 시작:', designData);
-        const result = await createFigmaComponent(designData);
-        console.log('Figma 컴포넌트 생성 완료:', result);
-      } catch (error) {
-        console.error('Figma 컴포넌트 생성 오류:', error);
-        console.error('오류 스택:', error.stack);
-        throw new Error(`Figma 컴포넌트 생성 실패: ${error.message}`);
-      }
-      
-      // 성공 메시지 전송
       figma.ui.postMessage({
         type: 'generation-status',
         message: '✅ 완료되었습니다!',
@@ -499,8 +702,6 @@ Return only valid JSON without any additional text or markdown formatting.`;
       
     } catch (error) {
       console.error('디자인 생성 오류:', error);
-      
-      // 오류 메시지 전송
       figma.ui.postMessage({
         type: 'generation-status',
         message: `❌ 오류가 발생했습니다: ${error.message}`,

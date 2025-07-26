@@ -13,16 +13,20 @@
           model,
           messages: [
             {
+              role: "system",
+              content: "You are a UI/UX designer. Create simple, mobile-friendly UI components."
+            },
+            {
               role: "user",
               content: prompt
             }
           ],
-          temperature: 0.7,
-          max_tokens: 2e3
+          max_tokens: 1e3,
+          temperature: 0.7
         })
       });
       if (!response.ok) {
-        throw new Error(`OpenAI API \uC624\uB958: ${response.status} ${response.statusText}`);
+        throw new Error(`OpenAI API \uC624\uB958: ${response.status}`);
       }
       const data = await response.json();
       return data.choices[0].message.content;
@@ -31,22 +35,285 @@
       throw error;
     }
   }
+  function createDefaultComponents(section, startY) {
+    const components = [];
+    switch (section.name) {
+      case "\uD5E4\uB354":
+        components.push({
+          name: "Header Title",
+          type: "text",
+          content: "\uC6E8\uB529\uD640 \uB9AC\uBDF0",
+          width: 300,
+          height: 40,
+          x: 0,
+          y: startY,
+          backgroundColor: "#FFFFFF",
+          fontSize: 24,
+          fontWeight: "BOLD",
+          textAlign: "CENTER"
+        });
+        break;
+      case "\uD3C9\uC810":
+        components.push({
+          name: "Rating Container",
+          type: "frame",
+          width: 320,
+          height: 80,
+          x: 0,
+          y: startY,
+          backgroundColor: "#F8F9FA",
+          layoutMode: "VERTICAL",
+          itemSpacing: 16,
+          paddingLeft: 16,
+          paddingRight: 16,
+          paddingTop: 16,
+          paddingBottom: 16,
+          children: [
+            {
+              name: "Rating Label",
+              type: "text",
+              content: "\uD3C9\uC810\uC744 \uC120\uD0DD\uD574\uC8FC\uC138\uC694",
+              width: 288,
+              height: 24,
+              x: 16,
+              y: startY + 16,
+              backgroundColor: "#F8F9FA",
+              fontSize: 16,
+              fontWeight: "BOLD",
+              textAlign: "LEFT"
+            }
+          ]
+        });
+        break;
+      case "\uC0AC\uC9C4\uC5C5\uB85C\uB4DC":
+        components.push({
+          name: "Photo Upload",
+          type: "rectangle",
+          width: 320,
+          height: 120,
+          x: 0,
+          y: startY,
+          backgroundColor: "#F8F9FA",
+          borderRadius: 8,
+          borderColor: "#E9ECEF",
+          borderWidth: 2
+        });
+        break;
+      case "\uD14D\uC2A4\uD2B8\uC785\uB825":
+        components.push({
+          name: "Text Input",
+          type: "rectangle",
+          width: 320,
+          height: 100,
+          x: 0,
+          y: startY,
+          backgroundColor: "#FFFFFF",
+          borderRadius: 8,
+          borderColor: "#E9ECEF",
+          borderWidth: 1
+        });
+        break;
+      case "\uBC84\uD2BC":
+        components.push({
+          name: "Submit Button",
+          type: "rectangle",
+          width: 320,
+          height: 48,
+          x: 0,
+          y: startY,
+          backgroundColor: "#FF6B9D",
+          borderRadius: 24
+        });
+        break;
+      default:
+        components.push({
+          name: "Default Component",
+          type: "text",
+          content: section.content || "\uCEF4\uD3EC\uB10C\uD2B8",
+          width: 300,
+          height: 40,
+          x: 0,
+          y: startY,
+          backgroundColor: "#FFFFFF",
+          fontSize: 16,
+          fontWeight: "NORMAL",
+          textAlign: "LEFT"
+        });
+    }
+    return components;
+  }
+  function analyzePlanSections(planText) {
+    const sections = [];
+    const sectionPatterns = [
+      {
+        name: "\uD5E4\uB354",
+        keywords: ["\uC81C\uBAA9", "\uBD80\uC81C", "\uD0C0\uC774\uD2C0", "title", "subtitle"],
+        priority: 1
+      },
+      {
+        name: "\uD3C9\uC810",
+        keywords: ["\uD3C9\uC810", "\uBCC4\uC810", "rating", "\uC810\uC218", "star", "\uBCC4"],
+        priority: 2
+      },
+      {
+        name: "\uC0AC\uC9C4\uC5C5\uB85C\uB4DC",
+        keywords: ["\uC0AC\uC9C4", "\uC5C5\uB85C\uB4DC", "\uC774\uBBF8\uC9C0", "photo", "upload", "image"],
+        priority: 3
+      },
+      {
+        name: "\uD14D\uC2A4\uD2B8\uC785\uB825",
+        keywords: ["\uC785\uB825", "\uD6C4\uAE30", "\uB0B4\uC6A9", "text", "input", "textarea", "\uB9AC\uBDF0"],
+        priority: 4
+      },
+      {
+        name: "\uBC84\uD2BC",
+        keywords: ["\uBC84\uD2BC", "\uC81C\uCD9C", "\uB4F1\uB85D", "button", "submit", "\uD655\uC778"],
+        priority: 5
+      }
+    ];
+    const sortedPatterns = sectionPatterns.sort((a, b) => a.priority - b.priority);
+    for (const section of sortedPatterns) {
+      const matchingLines = planText.split("\n").filter(
+        (line) => section.keywords.some(
+          (keyword) => line.toLowerCase().includes(keyword.toLowerCase())
+        )
+      );
+      if (matchingLines.length > 0) {
+        sections.push({
+          name: section.name,
+          content: matchingLines.join("\n")
+        });
+      }
+    }
+    if (sections.length === 0) {
+      sections.push({
+        name: "\uC804\uCCB4",
+        content: planText
+      });
+    }
+    return sections;
+  }
+  async function generateSectionDesign(apiKey, section, startY) {
+    const prompt = `You are a senior UI/UX designer at Apple/Google. Create production-ready mobile UI components.
+
+Section: ${section.name}
+Content: ${section.content}
+
+## Design System:
+- **Mobile First**: 375px width, iOS/Android guidelines
+- **Typography**: Inter font, 12/14/16/18/20/24/32px scale
+- **Spacing**: 8px grid system (8, 16, 24, 32, 48px)
+- **Colors**: Wedding theme (#FF6B9D primary, #FF8A80 secondary, #FFFFFF background, #F8F9FA surface, #212529 text, #6C757D secondary text)
+- **Shadows**: Subtle elevation (0 2px 8px rgba(0,0,0,0.1))
+- **Border Radius**: 8px for cards, 24px for buttons, 4px for inputs
+
+## Component Guidelines:
+
+### Headers:
+- Title: 24px, bold, #212529, center aligned
+- Subtitle: 16px, normal, #6C757D, center aligned
+- Section headers: 18px, bold, #212529, left aligned
+
+### Rating Components:
+- Create individual star components (5 stars)
+- Star size: 20px, #FF6B9D for filled, #E9ECEF for empty
+- Horizontal layout with proper spacing
+
+### Buttons:
+- Height: 48px minimum
+- Border radius: 24px
+- Primary: #FF6B9D background, white text
+- Secondary: transparent background, #FF6B9D border and text
+
+### Input Fields:
+- Height: 48px
+- Border radius: 8px
+- Border: 1px #E9ECEF
+- Focus state: #FF6B9D border
+
+### Cards/Containers:
+- Background: #FFFFFF
+- Border radius: 8px
+- Shadow: 0 2px 8px rgba(0,0,0,0.1)
+- Padding: 16px or 24px
+
+Return a JSON array with production-quality components:
+
+[
+  {
+    "name": "Component Name",
+    "type": "text|frame|rectangle|ellipse|star",
+    "content": "Text content (for text type)",
+    "width": number,
+    "height": number,
+    "x": number,
+    "y": ${startY},
+    "backgroundColor": "#FFFFFF",
+    "fontSize": number,
+    "fontWeight": "NORMAL|BOLD",
+    "textAlign": "LEFT|CENTER|RIGHT",
+    "borderRadius": number,
+    "borderColor": "#E9ECEF",
+    "borderWidth": number,
+    "layoutMode": "HORIZONTAL|VERTICAL" (for frames),
+    "itemSpacing": number,
+    "paddingLeft": number,
+    "paddingRight": number,
+    "paddingTop": number,
+    "paddingBottom": number,
+    "children": [child components array]
+  }
+]
+
+Create pixel-perfect, production-ready components. Return only valid JSON.`;
+    try {
+      const response = await callOpenAI(apiKey, prompt);
+      let cleanedResponse = response.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/,(\s*[}\]])/g, "$1").trim();
+      const arrayMatch = cleanedResponse.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        cleanedResponse = arrayMatch[0];
+      }
+      const openBrackets = (cleanedResponse.match(/\[/g) || []).length;
+      const closeBrackets = (cleanedResponse.match(/\]/g) || []).length;
+      if (openBrackets !== closeBrackets) {
+        console.log(`${section.name}: JSON \uAD04\uD638 \uBD88\uADE0\uD615, \uAE30\uBCF8 \uCEF4\uD3EC\uB10C\uD2B8 \uC0DD\uC131`);
+        return createDefaultComponents(section, startY);
+      }
+      const components = JSON.parse(cleanedResponse);
+      let currentY = startY;
+      for (const component of components) {
+        component.y = currentY;
+        currentY += (component.height || 60) + 10;
+      }
+      return components;
+    } catch (error) {
+      console.error(`${section.name} \uC139\uC158 \uC0DD\uC131 \uC624\uB958:`, error);
+      return createDefaultComponents(section, startY);
+    }
+  }
   async function createFigmaComponent(designData, parent = figma.currentPage) {
+    await loadFontWithFallback();
     const frame = figma.createFrame();
-    frame.name = designData.name || "Generated Component";
-    frame.resize(designData.width || 400, designData.height || 300);
+    frame.name = designData.name || "Generated Design";
+    frame.resize(designData.width || 375, designData.height || 600);
     frame.x = designData.x || 0;
     frame.y = designData.y || 0;
-    frame.layoutMode = "VERTICAL";
-    frame.primaryAxisAlignItems = "MIN";
-    frame.counterAxisAlignItems = "MIN";
-    frame.itemSpacing = 16;
-    frame.paddingLeft = 24;
-    frame.paddingRight = 24;
-    frame.paddingTop = 24;
-    frame.paddingBottom = 24;
     if (designData.backgroundColor) {
       frame.fills = [{ type: "SOLID", color: hexToRgb(designData.backgroundColor) }];
+    }
+    if (designData.layoutMode) {
+      try {
+        frame.layoutMode = designData.layoutMode;
+        frame.primaryAxisAlignItems = designData.primaryAxisAlignItems || "MIN";
+        frame.counterAxisAlignItems = designData.counterAxisAlignItems || "MIN";
+        frame.itemSpacing = designData.itemSpacing || 16;
+        frame.paddingLeft = designData.paddingLeft || 24;
+        frame.paddingRight = designData.paddingRight || 24;
+        frame.paddingTop = designData.paddingTop || 24;
+        frame.paddingBottom = designData.paddingBottom || 24;
+      } catch (error) {
+        console.log("Auto Layout \uC124\uC815 \uC2E4\uD328:", error);
+      }
     }
     if (designData.children && Array.isArray(designData.children)) {
       let yOffset = 0;
@@ -54,23 +321,19 @@
         yOffset = await createChildNode(child, frame, yOffset);
       }
     }
+    parent.appendChild(frame);
     return frame;
   }
   async function loadFontWithFallback() {
-    const fonts = [
-      { family: "Inter", style: "Regular" },
-      { family: "Roboto", style: "Regular" },
-      { family: "Segoe UI", style: "Regular" },
-      { family: "Arial", style: "Regular" }
-    ];
+    const fonts = ["Inter", "Roboto", "Segoe UI", "Arial"];
     for (const font of fonts) {
       try {
-        await figma.loadFontAsync(font);
-        console.log(`\uD3F0\uD2B8 \uB85C\uB4DC \uC131\uACF5: ${font.family}`);
+        await figma.loadFontAsync({ family: font, style: "Regular" });
+        await figma.loadFontAsync({ family: font, style: "Bold" });
+        console.log(`\uD3F0\uD2B8 \uB85C\uB4DC \uC131\uACF5: ${font}`);
         return;
       } catch (error) {
-        console.log(`\uD3F0\uD2B8 \uB85C\uB4DC \uC2E4\uD328: ${font.family}`, error);
-        continue;
+        console.log(`\uD3F0\uD2B8 \uB85C\uB4DC \uC2E4\uD328: ${font}`);
       }
     }
     throw new Error("\uC0AC\uC6A9 \uAC00\uB2A5\uD55C \uD3F0\uD2B8\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
@@ -78,90 +341,120 @@
   async function createChildNode(childData, parent, yOffset = 0) {
     let node;
     let currentYOffset = yOffset;
+    const width = childData.width || (childData.type === "text" ? 300 : 400);
+    const height = childData.height || (childData.type === "text" ? 60 : 200);
+    const x = childData.x || 0;
+    const y = childData.y !== void 0 ? childData.y : currentYOffset;
     switch (childData.type) {
       case "text":
-        node = figma.createText();
-        try {
-          await loadFontWithFallback();
-          node.characters = childData.content || "";
-          node.fontSize = 16;
-          node.textAlignHorizontal = "CENTER";
-          node.textAlignVertical = "CENTER";
-        } catch (error) {
-          console.error("\uD3F0\uD2B8 \uB85C\uB4DC \uC2E4\uD328:", error);
-          node.characters = childData.content || "";
+        const textNode = figma.createText();
+        textNode.characters = childData.content || "Sample Text";
+        textNode.fontSize = childData.fontSize || 16;
+        if (childData.fontWeight === "BOLD") {
+          try {
+            textNode.fontWeight = "Bold";
+          } catch (error) {
+            console.log("fontWeight \uC124\uC815 \uC2E4\uD328:", error);
+          }
         }
+        try {
+          if (childData.textAlign === "CENTER") {
+            textNode.textAlignHorizontal = "CENTER";
+          } else if (childData.textAlign === "RIGHT") {
+            textNode.textAlignHorizontal = "RIGHT";
+          } else {
+            textNode.textAlignHorizontal = "LEFT";
+          }
+        } catch (error) {
+          console.log("\uD14D\uC2A4\uD2B8 \uC815\uB82C \uC124\uC815 \uC2E4\uD328:", error);
+        }
+        node = textNode;
         break;
       case "frame":
-        node = figma.createFrame();
-        node.layoutMode = "VERTICAL";
-        node.primaryAxisAlignItems = "MIN";
-        node.counterAxisAlignItems = "MIN";
-        node.itemSpacing = 16;
-        node.paddingLeft = 24;
-        node.paddingRight = 24;
-        node.paddingTop = 24;
-        node.paddingBottom = 24;
-        if (childData.backgroundColor) {
-          node.fills = [{ type: "SOLID", color: hexToRgb(childData.backgroundColor) }];
+        const frameNode = figma.createFrame();
+        frameNode.name = childData.name || "Frame";
+        if (childData.layoutMode) {
+          try {
+            frameNode.layoutMode = childData.layoutMode;
+            frameNode.primaryAxisAlignItems = childData.primaryAxisAlignItems || "MIN";
+            frameNode.counterAxisAlignItems = childData.counterAxisAlignItems || "MIN";
+            frameNode.itemSpacing = childData.itemSpacing || 16;
+            frameNode.paddingLeft = childData.paddingLeft || 16;
+            frameNode.paddingRight = childData.paddingRight || 16;
+            frameNode.paddingTop = childData.paddingTop || 16;
+            frameNode.paddingBottom = childData.paddingBottom || 16;
+          } catch (error) {
+            console.log("Frame Auto Layout \uC124\uC815 \uC2E4\uD328:", error);
+          }
         }
+        node = frameNode;
         break;
       case "rectangle":
-        node = figma.createRectangle();
-        if (childData.backgroundColor) {
-          node.fills = [{ type: "SOLID", color: hexToRgb(childData.backgroundColor) }];
+        const rectNode = figma.createRectangle();
+        rectNode.name = childData.name || "Rectangle";
+        if (childData.borderRadius) {
+          try {
+            rectNode.cornerRadius = childData.borderRadius;
+          } catch (error) {
+            console.log("cornerRadius \uC124\uC815 \uC2E4\uD328:", error);
+          }
         }
+        node = rectNode;
         break;
       case "ellipse":
-        node = figma.createEllipse();
-        if (childData.backgroundColor) {
-          node.fills = [{ type: "SOLID", color: hexToRgb(childData.backgroundColor) }];
-        }
+        const ellipseNode = figma.createEllipse();
+        ellipseNode.name = childData.name || "Ellipse";
+        node = ellipseNode;
+        break;
+      case "star":
+        const starNode = figma.createStar();
+        starNode.name = childData.name || "Star";
+        node = starNode;
         break;
       default:
-        node = figma.createFrame();
+        const defaultNode = figma.createRectangle();
+        defaultNode.name = childData.name || "Component";
+        node = defaultNode;
     }
-    let defaultWidth = 400;
-    let defaultHeight = 200;
-    if (childData.type === "text") {
-      defaultWidth = 300;
-      defaultHeight = 60;
+    node.resize(width, height);
+    node.x = x;
+    node.y = y;
+    if (childData.backgroundColor && "fills" in node) {
+      try {
+        node.fills = [{ type: "SOLID", color: hexToRgb(childData.backgroundColor) }];
+      } catch (error) {
+        console.log("\uBC30\uACBD\uC0C9 \uC124\uC815 \uC2E4\uD328:", error);
+      }
     }
-    node.name = childData.name || "Generated Element";
-    node.resize(childData.width || defaultWidth, childData.height || defaultHeight);
-    if (childData.x !== void 0) {
-      node.x = childData.x;
-    } else {
-      node.x = 0;
+    if (childData.borderColor && childData.borderWidth && "strokes" in node) {
+      try {
+        node.strokes = [{ type: "SOLID", color: hexToRgb(childData.borderColor) }];
+        node.strokeWeight = childData.borderWidth;
+      } catch (error) {
+        console.log("\uD14C\uB450\uB9AC \uC124\uC815 \uC2E4\uD328:", error);
+      }
     }
-    if (childData.y !== void 0) {
-      node.y = childData.y;
-    } else {
-      node.y = currentYOffset;
-      currentYOffset += (childData.height || defaultHeight) + 16;
+    if (childData.borderRadius && "cornerRadius" in node) {
+      try {
+        node.cornerRadius = childData.borderRadius;
+      } catch (error) {
+        console.log("\uBAA8\uC11C\uB9AC \uBC18\uACBD \uC124\uC815 \uC2E4\uD328:", error);
+      }
     }
-    if (node.type === "FRAME" && childData.layoutMode) {
-      node.layoutMode = childData.layoutMode;
-      if (childData.primaryAxisAlignItems) {
-        node.primaryAxisAlignItems = childData.primaryAxisAlignItems;
-      }
-      if (childData.counterAxisAlignItems) {
-        node.counterAxisAlignItems = childData.counterAxisAlignItems;
-      }
-      if (childData.itemSpacing !== void 0) {
-        node.itemSpacing = childData.itemSpacing;
-      }
-      if (childData.paddingLeft !== void 0) {
-        node.paddingLeft = childData.paddingLeft;
-      }
-      if (childData.paddingRight !== void 0) {
-        node.paddingRight = childData.paddingRight;
-      }
-      if (childData.paddingTop !== void 0) {
-        node.paddingTop = childData.paddingTop;
-      }
-      if (childData.paddingBottom !== void 0) {
-        node.paddingBottom = childData.paddingBottom;
+    if ("effects" in node && (childData.type === "frame" || childData.type === "rectangle")) {
+      try {
+        node.effects = [
+          {
+            type: "DROP_SHADOW",
+            color: { r: 0, g: 0, b: 0, a: 0.1 },
+            offset: { x: 0, y: 2 },
+            radius: 8,
+            visible: true,
+            blendMode: "NORMAL"
+          }
+        ];
+      } catch (error) {
+        console.log("\uADF8\uB9BC\uC790 \uD6A8\uACFC \uC124\uC815 \uC2E4\uD328:", error);
       }
     }
     parent.appendChild(node);
@@ -171,7 +464,7 @@
         childYOffset = await createChildNode(grandChild, node, childYOffset);
       }
     }
-    return currentYOffset;
+    return y + height + 10;
   }
   function hexToRgb(hex) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -231,174 +524,40 @@
           return;
         }
         const planText = msg.payload;
-        figma.ui.postMessage({
-          type: "generation-status",
-          message: "GPT \uBD84\uC11D \uC911...",
-          status: "processing"
-        });
-        const step1Prompt = `You are a senior product designer with expertise in Figma and mobile UI design.
-
-Your task is to analyze the following planning document and generate a comprehensive UI component list for a clean, mobile-friendly wireframe layout.
-
-Use visual hierarchy, proper spacing, and modern design components. Group related elements together logically.
-
-Use soft, wedding-themed colors (soft pinks, corals, whites, light grays) and emphasize clarity and friendliness.
-
-Here is the planning document written by the user:
-"""
-${planText}
-"""
-
-Please generate a detailed component list that includes:
-- Section headers with clear typography hierarchy
-- Input fields with proper labels and placeholders
-- Interactive elements (buttons, toggles, sliders)
-- Rating components (star ratings, scales)
-- Image upload areas with visual indicators
-- Large, prominent CTA (Call-to-Action) buttons
-- Proper spacing and grouping containers
-
-Return a JSON array with the following structure:
-[
-  {
-    "name": "Component Name",
-    "type": "text|frame|rectangle|ellipse",
-    "content": "Text content (for text type)",
-    "width": number,
-    "height": number,
-    "x": number,
-    "y": number,
-    "backgroundColor": "#colorcode (optional)",
-    "fontSize": number (for text),
-    "textAlign": "LEFT|CENTER|RIGHT",
-    "children": [child components array]
-  }
-]
-
-Focus on creating a logical, aesthetic grouping of UI elements that fits a mobile screen layout (320-375px width).
-Use wedding-themed colors: #FF6B9D (soft pink), #FF8A80 (coral), #F8F9FA (light gray), #FFFFFF (white), #6C757D (text gray).
-
-Return only valid JSON without any additional text or markdown formatting.`;
-        const componentListResponse = await callOpenAI(apiKey, step1Prompt);
-        let componentList;
-        try {
-          let cleanedResponse = componentListResponse.trim();
-          cleanedResponse = cleanedResponse.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-          console.log("\uC815\uB9AC\uB41C \uC751\uB2F5:", cleanedResponse);
-          componentList = JSON.parse(cleanedResponse);
-        } catch (parseError) {
-          console.error("\uCEF4\uD3EC\uB10C\uD2B8 \uB9AC\uC2A4\uD2B8 \uD30C\uC2F1 \uC624\uB958:", parseError);
-          console.log("\uD30C\uC2F1 \uC2E4\uD328\uD55C \uC751\uB2F5:", componentListResponse);
-          const jsonMatch = componentListResponse.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            try {
-              componentList = JSON.parse(jsonMatch[0]);
-              console.log("JSON \uCD94\uCD9C \uC131\uACF5:", componentList);
-            } catch (extractError) {
-              console.error("JSON \uCD94\uCD9C \uD6C4 \uD30C\uC2F1 \uC2E4\uD328:", extractError);
-              throw new Error("\uCEF4\uD3EC\uB10C\uD2B8 \uB9AC\uC2A4\uD2B8\uB97C \uD30C\uC2F1\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
-            }
-          } else {
-            throw new Error("\uCEF4\uD3EC\uB10C\uD2B8 \uB9AC\uC2A4\uD2B8\uB97C \uD30C\uC2F1\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+        const sections = analyzePlanSections(planText);
+        console.log("\uBD84\uC11D\uB41C \uC139\uC158\uB4E4:", sections);
+        let allDesignData = [];
+        let currentY = 0;
+        for (let i = 0; i < sections.length; i++) {
+          const section = sections[i];
+          figma.ui.postMessage({
+            type: "generation-status",
+            message: `${section.name} \uC0DD\uC131 \uC911... (${i + 1}/${sections.length})`,
+            status: "processing"
+          });
+          const sectionDesign = await generateSectionDesign(apiKey, section, currentY);
+          allDesignData = allDesignData.concat(sectionDesign);
+          if (sectionDesign.length > 0) {
+            const lastElement = sectionDesign[sectionDesign.length - 1];
+            currentY = lastElement.y + lastElement.height + 20;
           }
         }
+        const mainFrame = {
+          name: "Review Page",
+          type: "frame",
+          width: 375,
+          height: currentY + 50,
+          x: 0,
+          y: 0,
+          backgroundColor: "#FFFFFF",
+          children: allDesignData
+        };
         figma.ui.postMessage({
           type: "generation-status",
-          message: "\uB514\uC790\uC778 \uC0DD\uC131 \uC911...",
+          message: "Figma \uCEF4\uD3EC\uB10C\uD2B8 \uC0DD\uC131 \uC911...",
           status: "processing"
         });
-        const step2Prompt = `You are a senior Figma designer specializing in mobile UI design and component architecture.
-
-Your task is to convert the following component list into a well-structured Figma design JSON that will create a beautiful, mobile-friendly UI layout.
-
-The design should follow modern mobile design principles:
-- Proper visual hierarchy with clear typography
-- Consistent spacing and alignment
-- Mobile-first responsive layout (320-375px width)
-- Wedding-themed color palette
-- Clean, professional appearance
-
-Component List:
-${JSON.stringify(componentList, null, 2)}
-
-Please convert this into a Figma-compatible JSON structure with the following specifications:
-
-{
-  "name": "Main Frame Name",
-  "width": 375,
-  "height": number (calculated based on content),
-  "backgroundColor": "#FFFFFF",
-  "layoutMode": "VERTICAL",
-  "primaryAxisAlignItems": "MIN",
-  "counterAxisAlignItems": "MIN",
-  "itemSpacing": 16,
-  "paddingLeft": 24,
-  "paddingRight": 24,
-  "paddingTop": 24,
-  "paddingBottom": 24,
-  "children": [
-    {
-      "type": "text|frame|rectangle|ellipse",
-      "name": "Element Name",
-      "content": "Text content (for text type)",
-      "width": number,
-      "height": number,
-      "x": number,
-      "y": number,
-      "backgroundColor": "#colorcode",
-      "fontSize": number (for text elements),
-      "textAlign": "LEFT|CENTER|RIGHT",
-      "layoutMode": "VERTICAL" (for frame containers),
-      "itemSpacing": number (for frame containers),
-      "paddingLeft": number,
-      "paddingRight": number,
-      "paddingTop": number,
-      "paddingBottom": number,
-      "children": [child elements array]
-    }
-  ]
-}
-
-Design Guidelines:
-- Use wedding-themed colors: #FF6B9D (soft pink), #FF8A80 (coral), #F8F9FA (light gray), #FFFFFF (white), #6C757D (text gray)
-- Ensure proper spacing between elements (16px minimum)
-- Group related elements in frame containers
-- Use appropriate font sizes (16px for body text, 20px+ for headers)
-- Create a logical visual hierarchy
-
-Return only valid JSON without any additional text or markdown formatting.`;
-        const designJsonResponse = await callOpenAI(apiKey, step2Prompt);
-        let designData;
-        try {
-          let cleanedResponse = designJsonResponse.trim();
-          cleanedResponse = cleanedResponse.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-          console.log("\uC815\uB9AC\uB41C \uB514\uC790\uC778 \uC751\uB2F5:", cleanedResponse);
-          designData = JSON.parse(cleanedResponse);
-        } catch (parseError) {
-          console.error("\uB514\uC790\uC778 JSON \uD30C\uC2F1 \uC624\uB958:", parseError);
-          console.log("\uD30C\uC2F1 \uC2E4\uD328\uD55C \uB514\uC790\uC778 \uC751\uB2F5:", designJsonResponse);
-          const jsonMatch = designJsonResponse.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            try {
-              designData = JSON.parse(jsonMatch[0]);
-              console.log("\uB514\uC790\uC778 JSON \uCD94\uCD9C \uC131\uACF5:", designData);
-            } catch (extractError) {
-              console.error("\uB514\uC790\uC778 JSON \uCD94\uCD9C \uD6C4 \uD30C\uC2F1 \uC2E4\uD328:", extractError);
-              throw new Error("\uB514\uC790\uC778 JSON\uC744 \uD30C\uC2F1\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
-            }
-          } else {
-            throw new Error("\uB514\uC790\uC778 JSON\uC744 \uD30C\uC2F1\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
-          }
-        }
-        try {
-          console.log("Figma \uCEF4\uD3EC\uB10C\uD2B8 \uC0DD\uC131 \uC2DC\uC791:", designData);
-          const result = await createFigmaComponent(designData);
-          console.log("Figma \uCEF4\uD3EC\uB10C\uD2B8 \uC0DD\uC131 \uC644\uB8CC:", result);
-        } catch (error) {
-          console.error("Figma \uCEF4\uD3EC\uB10C\uD2B8 \uC0DD\uC131 \uC624\uB958:", error);
-          console.error("\uC624\uB958 \uC2A4\uD0DD:", error.stack);
-          throw new Error(`Figma \uCEF4\uD3EC\uB10C\uD2B8 \uC0DD\uC131 \uC2E4\uD328: ${error.message}`);
-        }
+        await createFigmaComponent(mainFrame);
         figma.ui.postMessage({
           type: "generation-status",
           message: "\u2705 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4!",
